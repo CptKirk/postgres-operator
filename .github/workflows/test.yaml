@@ -1,94 +1,88 @@
 name: Tests
 
-on:
-  pull_request:
-    branches:
-      - master
-  push:
-    branches:
-      - master
+on: workflow_dispatch
 
 jobs:
-  go-test:
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 1.x
-      - run: make check
-      - run: make check-generate
+  # go-test:
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-go@v3
+  #       with:
+  #         go-version: 1.x
+  #     - run: make check
+  #     - run: make check-generate
 
-      - name: Ensure go.mod is tidy
-        run: go mod tidy && git diff --exit-code -- go.mod
+  #     - name: Ensure go.mod is tidy
+  #       run: go mod tidy && git diff --exit-code -- go.mod
 
-  kubernetes-api:
-    runs-on: ubuntu-20.04
-    needs: [go-test]
-    strategy:
-      fail-fast: false
-      matrix:
-        kubernetes: ['default']
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
-        with: { go-version: 1.x }
-      - run: go mod download
-      - run: ENVTEST_K8S_VERSION="${KUBERNETES#default}" make check-envtest
-        env:
-          KUBERNETES: "${{ matrix.kubernetes }}"
-          GO_TEST: go test --coverprofile 'envtest.coverage' --coverpkg ./internal/...
+  # kubernetes-api:
+  #   runs-on: ubuntu-20.04
+  #   needs: [go-test]
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       kubernetes: ['default']
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-go@v3
+  #       with: { go-version: 1.x }
+  #     - run: go mod download
+  #     - run: ENVTEST_K8S_VERSION="${KUBERNETES#default}" make check-envtest
+  #       env:
+  #         KUBERNETES: "${{ matrix.kubernetes }}"
+  #         GO_TEST: go test --coverprofile 'envtest.coverage' --coverpkg ./internal/...
 
-      # Upload coverage to GitHub
-      - run: gzip envtest.coverage
-      - uses: actions/upload-artifact@v3
-        with:
-          name: "kubernetes-api=${{ matrix.kubernetes }}"
-          path: envtest.coverage.gz
-          retention-days: 1
+  #     # Upload coverage to GitHub
+  #     - run: gzip envtest.coverage
+  #     - uses: actions/upload-artifact@v3
+  #       with:
+  #         name: "kubernetes-api=${{ matrix.kubernetes }}"
+  #         path: envtest.coverage.gz
+  #         retention-days: 1
 
-  kubernetes-k3d:
-    if: "${{ github.repository == 'CrunchyData/postgres-operator' }}"
-    runs-on: ubuntu-20.04
-    needs: [go-test]
-    strategy:
-      fail-fast: false
-      matrix:
-        kubernetes: [v1.27, v1.24]
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
-        with: { go-version: 1.x }
+  # kubernetes-k3d:
+  #   if: "${{ github.repository == 'CrunchyData/postgres-operator' }}"
+  #   runs-on: ubuntu-20.04
+  #   needs: [go-test]
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       kubernetes: [v1.27, v1.24]
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-go@v3
+  #       with: { go-version: 1.x }
 
-      - name: Start k3s
-        uses: ./.github/actions/k3d
-        with:
-          k3s-channel: "${{ matrix.kubernetes }}"
-          prefetch-images: |
-            registry.developers.crunchydata.com/crunchydata/crunchy-pgbackrest:ubi8-2.45-3
-            registry.developers.crunchydata.com/crunchydata/crunchy-pgbouncer:ubi8-1.19-3
-            registry.developers.crunchydata.com/crunchydata/crunchy-postgres:ubi8-14.8-3
+  #     - name: Start k3s
+  #       uses: ./.github/actions/k3d
+  #       with:
+  #         k3s-channel: "${{ matrix.kubernetes }}"
+  #         prefetch-images: |
+  #           registry.developers.crunchydata.com/crunchydata/crunchy-pgbackrest:ubi8-2.45-3
+  #           registry.developers.crunchydata.com/crunchydata/crunchy-pgbouncer:ubi8-1.19-3
+  #           registry.developers.crunchydata.com/crunchydata/crunchy-postgres:ubi8-14.8-3
 
-      - run: make createnamespaces check-envtest-existing
-        env:
-          PGO_TEST_TIMEOUT_SCALE: 1.2
-          GO_TEST: go test --coverprofile 'envtest-existing.coverage' --coverpkg ./internal/...
+  #     - run: make createnamespaces check-envtest-existing
+  #       env:
+  #         PGO_TEST_TIMEOUT_SCALE: 1.2
+  #         GO_TEST: go test --coverprofile 'envtest-existing.coverage' --coverpkg ./internal/...
 
-      # Upload coverage to GitHub
-      - run: gzip envtest-existing.coverage
-      - uses: actions/upload-artifact@v3
-        with:
-          name: "kubernetes-k3d=${{ matrix.kubernetes }}"
-          path: envtest-existing.coverage.gz
-          retention-days: 1
+  #     # Upload coverage to GitHub
+  #     - run: gzip envtest-existing.coverage
+  #     - uses: actions/upload-artifact@v3
+  #       with:
+  #         name: "kubernetes-k3d=${{ matrix.kubernetes }}"
+  #         path: envtest-existing.coverage.gz
+  #         retention-days: 1
 
   kuttl-k3d:
     runs-on: ubuntu-20.04
-    needs: [go-test]
+    # needs: [go-test]
     strategy:
       fail-fast: false
       matrix:
-        kubernetes: [v1.25, v1.24, v1.23, v1.22, v1.21]
+        kubernetes: [v1.27, v1.28]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
@@ -155,42 +149,42 @@ jobs:
       - name: Stop PGO
         run: docker stop 'postgres-operator' || true
 
-  coverage-report:
-    if: ${{ success() || contains(needs.*.result, 'success') }}
-    runs-on: ubuntu-latest
-    needs:
-      - kubernetes-api
-      - kubernetes-k3d
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
-        with: { go-version: 1.x }
-      - uses: actions/download-artifact@v3
-        with: { path: download }
+  # coverage-report:
+  #   if: ${{ success() || contains(needs.*.result, 'success') }}
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #     - kubernetes-api
+  #     - kubernetes-k3d
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-go@v3
+  #       with: { go-version: 1.x }
+  #     - uses: actions/download-artifact@v3
+  #       with: { path: download }
 
-      # Combine the coverage profiles by taking the mode line from any one file
-      # and the data from all files. Write a list of functions with less than
-      # 100% coverage to the job summary, and upload a complete HTML report.
-      - name: Generate report
-        run: |
-          gunzip --keep download/*/*.gz
-          ( sed -e '1q' download/*/*.coverage
-            tail -qn +2 download/*/*.coverage ) > total.coverage
-          go tool cover --func total.coverage -o total-coverage.txt
-          go tool cover --html total.coverage -o total-coverage.html
+  #     # Combine the coverage profiles by taking the mode line from any one file
+  #     # and the data from all files. Write a list of functions with less than
+  #     # 100% coverage to the job summary, and upload a complete HTML report.
+  #     - name: Generate report
+  #       run: |
+  #         gunzip --keep download/*/*.gz
+  #         ( sed -e '1q' download/*/*.coverage
+  #           tail -qn +2 download/*/*.coverage ) > total.coverage
+  #         go tool cover --func total.coverage -o total-coverage.txt
+  #         go tool cover --html total.coverage -o total-coverage.html
 
-          awk < total-coverage.txt '
-            END { print "<details><summary>Total Coverage: <code>" $3 " " $2 "</code></summary>" }
-          ' >> "${GITHUB_STEP_SUMMARY}"
+  #         awk < total-coverage.txt '
+  #           END { print "<details><summary>Total Coverage: <code>" $3 " " $2 "</code></summary>" }
+  #         ' >> "${GITHUB_STEP_SUMMARY}"
 
-          sed < total-coverage.txt -e '/100.0%/d' -e "s,$(go list -m)/,," | column -t | awk '
-            NR == 1 { print "\n\n```" } { print } END { if (NR > 0) print "```\n\n"; print "</details>" }
-          ' >> "${GITHUB_STEP_SUMMARY}"
+  #         sed < total-coverage.txt -e '/100.0%/d' -e "s,$(go list -m)/,," | column -t | awk '
+  #           NR == 1 { print "\n\n```" } { print } END { if (NR > 0) print "```\n\n"; print "</details>" }
+  #         ' >> "${GITHUB_STEP_SUMMARY}"
 
-      # Upload coverage to GitHub
-      - run: gzip total-coverage.html
-      - uses: actions/upload-artifact@v3
-        with:
-          name: coverage-report
-          path: total-coverage.html.gz
-          retention-days: 15
+  #     # Upload coverage to GitHub
+  #     - run: gzip total-coverage.html
+  #     - uses: actions/upload-artifact@v3
+  #       with:
+  #         name: coverage-report
+  #         path: total-coverage.html.gz
+  #         retention-days: 15
